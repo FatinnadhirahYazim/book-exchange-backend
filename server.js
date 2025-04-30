@@ -31,6 +31,8 @@ app.use(express.json());
 // MongoDB Connection with enhanced error handling
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/Bookexchange';
 console.log('Attempting to connect to MongoDB...');
+console.log('Environment variables available:', Object.keys(process.env));
+console.log('MongoDB URI defined:', !!process.env.MONGODB_URI);
 
 mongoose.connect(MONGODB_URI, {
   useNewUrlParser: true,
@@ -38,6 +40,7 @@ mongoose.connect(MONGODB_URI, {
 })
 .then(() => {
   console.log('Successfully connected to MongoDB.');
+  console.log('Database connection state:', mongoose.connection.readyState);
   // Log sanitized connection string (hiding credentials)
   const sanitizedUri = MONGODB_URI.replace(
     /mongodb(\+srv)?:\/\/([^:]+):([^@]+)@/,
@@ -46,7 +49,12 @@ mongoose.connect(MONGODB_URI, {
   console.log('Database URL:', sanitizedUri);
 })
 .catch(err => {
-  console.error('MongoDB connection error:', err);
+  console.error('MongoDB connection error details:', {
+    name: err.name,
+    message: err.message,
+    code: err.code,
+    codeName: err.codeName
+  });
   // Log sanitized connection string (hiding credentials)
   const sanitizedUri = MONGODB_URI.replace(
     /mongodb(\+srv)?:\/\/([^:]+):([^@]+)@/,
@@ -67,6 +75,30 @@ app.get('/', (req, res) => {
   } catch (error) {
     console.error('Error in root route:', error);
     res.status(500).json({ message: 'Internal server error', error: error.message });
+  }
+});
+
+// Health check endpoint
+app.get('/health', (req, res) => {
+  try {
+    res.json({
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+      mongodb: {
+        state: mongoose.connection.readyState,
+        connected: mongoose.connection.readyState === 1,
+        host: mongoose.connection.host,
+        name: mongoose.connection.name
+      },
+      environment: process.env.NODE_ENV || 'development',
+      uptime: process.uptime()
+    });
+  } catch (error) {
+    console.error('Health check error:', error);
+    res.status(500).json({ 
+      status: 'error',
+      error: error.message
+    });
   }
 });
 
