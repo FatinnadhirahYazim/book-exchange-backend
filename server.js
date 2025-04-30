@@ -35,7 +35,7 @@ app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
     time: new Date().toISOString(),
-    env: process.env.NODE_ENV || 'development'
+    mongodb: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'
   });
 });
 
@@ -87,7 +87,7 @@ app.use((err, req, res, next) => {
 });
 
 // Handle 404
-app.use('*', (req, res) => {
+app.use((req, res) => {
   res.status(404).json({ message: 'Route not found' });
 });
 
@@ -109,6 +109,7 @@ const startServer = async () => {
     // Start the server
     app.listen(PORT, () => {
       console.log(`Server is running on port ${PORT}`);
+      console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
     });
   } catch (error) {
     console.error('Server startup error:', error);
