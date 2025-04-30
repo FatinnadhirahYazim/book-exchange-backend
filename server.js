@@ -19,110 +19,113 @@ import bookRoutes from './routes/bookRoutes.js';
 const app = express();
 
 // Enhanced CORS configuration
-app.use(cors({
-  origin: '*',
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  credentials: true,
-  allowedHeaders: ['Content-Type', 'Authorization']
-}));
-
+app.use(cors());
 app.use(express.json());
 
-// MongoDB Connection with enhanced error handling
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/Bookexchange';
-console.log('Attempting to connect to MongoDB...');
-console.log('Environment variables available:', Object.keys(process.env));
-console.log('MongoDB URI defined:', !!process.env.MONGODB_URI);
-
-mongoose.connect(MONGODB_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true
-})
-.then(() => {
-  console.log('Successfully connected to MongoDB.');
-  console.log('Database connection state:', mongoose.connection.readyState);
-  // Log sanitized connection string (hiding credentials)
-  const sanitizedUri = MONGODB_URI.replace(
-    /mongodb(\+srv)?:\/\/([^:]+):([^@]+)@/,
-    'mongodb$1://***:***@'
-  );
-  console.log('Database URL:', sanitizedUri);
-})
-.catch(err => {
-  console.error('MongoDB connection error details:', {
-    name: err.name,
-    message: err.message,
-    code: err.code,
-    codeName: err.codeName
-  });
-  // Log sanitized connection string (hiding credentials)
-  const sanitizedUri = MONGODB_URI.replace(
-    /mongodb(\+srv)?:\/\/([^:]+):([^@]+)@/,
-    'mongodb$1://***:***@'
-  );
-  console.error('Connection string used:', sanitizedUri);
-  process.exit(1);
-});
-
-// Basic route with error handling
+// Basic route for testing
 app.get('/', (req, res) => {
-  try {
-    res.json({ 
-      message: 'Welcome to Book Exchange API',
-      environment: process.env.NODE_ENV || 'development',
-      mongodb: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'
-    });
-  } catch (error) {
-    console.error('Error in root route:', error);
-    res.status(500).json({ message: 'Internal server error', error: error.message });
-  }
+  res.json({ 
+    message: 'API is running',
+    time: new Date().toISOString()
+  });
 });
 
 // Health check endpoint
 app.get('/health', (req, res) => {
-  try {
-    res.json({
-      status: 'ok',
-      timestamp: new Date().toISOString(),
-      mongodb: {
-        state: mongoose.connection.readyState,
-        connected: mongoose.connection.readyState === 1,
-        host: mongoose.connection.host,
-        name: mongoose.connection.name
-      },
-      environment: process.env.NODE_ENV || 'development',
-      uptime: process.uptime()
-    });
-  } catch (error) {
-    console.error('Health check error:', error);
-    res.status(500).json({ 
-      status: 'error',
-      error: error.message
-    });
-  }
-});
-
-// Routes with error handling
-app.use('/api/auth', authRoutes);
-app.use('/api/books', bookRoutes);
-
-// Global error handling middleware
-app.use((err, req, res, next) => {
-  console.error('Global error:', err);
-  res.status(500).json({ 
-    message: 'Something went wrong!',
-    error: process.env.NODE_ENV === 'development' ? err.message : 'Internal server error'
+  res.json({
+    status: 'ok',
+    time: new Date().toISOString(),
+    env: process.env.NODE_ENV || 'development'
   });
 });
 
-// Handle unhandled routes
+// MongoDB Connection with enhanced error handling
+const connectDB = async () => {
+  try {
+    // Log available environment variables (without values)
+    console.log('Available environment variables:', Object.keys(process.env));
+    
+    // Check MongoDB URI
+    const uri = process.env.MONGODB_URI;
+    if (!uri) {
+      console.error('MONGODB_URI is not defined');
+      return false;
+    }
+
+    console.log('Attempting MongoDB connection...');
+    
+    await mongoose.connect(uri, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+      serverSelectionTimeoutMS: 5000,
+      heartbeatFrequencyMS: 2000,
+    });
+
+    console.log('MongoDB Connected');
+    return true;
+  } catch (error) {
+    console.error('MongoDB connection error:', {
+      name: error.name,
+      message: error.message,
+      code: error.code
+    });
+    return false;
+  }
+};
+
+// Routes
+app.use('/api/auth', authRoutes);
+app.use('/api/books', bookRoutes);
+
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error('Error:', err);
+  res.status(500).json({ 
+    status: 'error',
+    message: err.message || 'Internal server error'
+  });
+});
+
+// Handle 404
 app.use('*', (req, res) => {
   res.status(404).json({ message: 'Route not found' });
 });
 
-// Start server with error handling
+// Start server
 const PORT = process.env.PORT || 8080;
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
-  console.log('Environment:', process.env.NODE_ENV || 'development');
-}); 
+
+const startServer = async () => {
+  try {
+    console.log('Starting server...');
+    console.log('PORT:', PORT);
+    console.log('NODE_ENV:', process.env.NODE_ENV);
+
+    // Try to connect to MongoDB but don't exit if it fails
+    const isConnected = await connectDB();
+    if (!isConnected) {
+      console.log('Warning: MongoDB connection failed, but server will continue to run');
+    }
+
+    // Start the server
+    app.listen(PORT, () => {
+      console.log(`Server is running on port ${PORT}`);
+    });
+  } catch (error) {
+    console.error('Server startup error:', error);
+    // Don't exit the process, let Railway handle restarts if needed
+  }
+};
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught Exception:', error);
+  // Don't exit the process
+});
+
+process.on('unhandledRejection', (error) => {
+  console.error('Unhandled Rejection:', error);
+  // Don't exit the process
+});
+
+// Start the server
+startServer(); 
