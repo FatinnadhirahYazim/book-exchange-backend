@@ -8,7 +8,21 @@ const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 // Register user
 export const register = async (req, res) => {
   try {
+    console.log('Registration attempt:', req.body);
     const { username, email, password } = req.body;
+
+    // Validate input
+    if (!username || !email || !password) {
+      console.log('Missing required fields');
+      return res.status(400).json({ 
+        message: 'Please provide all required fields',
+        missing: {
+          username: !username,
+          email: !email,
+          password: !password
+        }
+      });
+    }
 
     // Check if user already exists
     let user = await User.findOne({ 
@@ -19,6 +33,7 @@ export const register = async (req, res) => {
     });
     
     if (user) {
+      console.log('User already exists:', { email, username });
       if (user.email === email) {
         return res.status(400).json({ message: 'Email already registered' });
       }
@@ -33,15 +48,26 @@ export const register = async (req, res) => {
       isVerified: true // Set to true by default since we're not verifying
     });
 
+    console.log('Attempting to save user...');
     await user.save();
+    console.log('User saved successfully');
 
     res.status(201).json({ 
       message: 'Registration successful',
       userId: user._id 
     });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Server error' });
+    console.error('Registration error:', error);
+    if (error.name === 'ValidationError') {
+      return res.status(400).json({ 
+        message: 'Validation error', 
+        errors: Object.values(error.errors).map(err => err.message)
+      });
+    }
+    res.status(500).json({ 
+      message: 'Server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 };
 

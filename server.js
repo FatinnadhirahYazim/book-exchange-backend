@@ -18,47 +18,79 @@ import bookRoutes from './routes/bookRoutes.js';
 // Create Express app
 const app = express();
 
-// Middleware
+// Enhanced CORS configuration
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
-  credentials: true
+  origin: '*',
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  credentials: true,
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
+
 app.use(express.json());
 
-// MongoDB Connection
+// MongoDB Connection with enhanced error handling
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/Bookexchange';
+console.log('Attempting to connect to MongoDB...');
+
 mongoose.connect(MONGODB_URI, {
   useNewUrlParser: true,
   useUnifiedTopology: true
 })
 .then(() => {
   console.log('Successfully connected to MongoDB.');
+  // Log sanitized connection string (hiding credentials)
+  const sanitizedUri = MONGODB_URI.replace(
+    /mongodb(\+srv)?:\/\/([^:]+):([^@]+)@/,
+    'mongodb$1://***:***@'
+  );
+  console.log('Database URL:', sanitizedUri);
 })
 .catch(err => {
   console.error('MongoDB connection error:', err);
+  // Log sanitized connection string (hiding credentials)
+  const sanitizedUri = MONGODB_URI.replace(
+    /mongodb(\+srv)?:\/\/([^:]+):([^@]+)@/,
+    'mongodb$1://***:***@'
+  );
+  console.error('Connection string used:', sanitizedUri);
   process.exit(1);
 });
 
-// Routes
+// Basic route with error handling
+app.get('/', (req, res) => {
+  try {
+    res.json({ 
+      message: 'Welcome to Book Exchange API',
+      environment: process.env.NODE_ENV || 'development',
+      mongodb: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'
+    });
+  } catch (error) {
+    console.error('Error in root route:', error);
+    res.status(500).json({ message: 'Internal server error', error: error.message });
+  }
+});
+
+// Routes with error handling
 app.use('/api/auth', authRoutes);
 app.use('/api/books', bookRoutes);
 
-// Basic route
-app.get('/', (req, res) => {
-  res.json({ 
-    message: 'Welcome to Book Exchange API',
-    environment: process.env.NODE_ENV || 'development'
+// Global error handling middleware
+app.use((err, req, res, next) => {
+  console.error('Global error:', err);
+  res.status(500).json({ 
+    message: 'Something went wrong!',
+    error: process.env.NODE_ENV === 'development' ? err.message : 'Internal server error'
   });
 });
 
-// Error handling middleware
-app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({ message: 'Something went wrong!' });
+// Handle unhandled routes
+app.use('*', (req, res) => {
+  res.status(404).json({ message: 'Route not found' });
 });
 
-// Start server
-const PORT = process.env.PORT || 5000;
+// Start server with error handling
+const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
+  console.log('Environment:', process.env.NODE_ENV || 'development');
 }); 
