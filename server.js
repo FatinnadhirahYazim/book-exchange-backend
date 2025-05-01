@@ -68,19 +68,26 @@ const connectDB = async () => {
       throw new Error('MONGODB_URI is not defined in environment variables');
     }
 
-    console.log('MongoDB URI exists:', !!uri);
-    console.log('Attempting MongoDB connection...');
+    // Add detailed logging
+    console.log('=== MongoDB Connection Debug ===');
+    console.log('Attempting connection with following details:');
+    console.log('- URI exists:', !!uri);
+    console.log('- URI starts with:', uri.substring(0, 10) + '...');
+    console.log('- Current environment:', process.env.NODE_ENV);
     
-    // Set up connection options
+    // Set up connection options with debug logging
     const options = {
       useNewUrlParser: true,
       useUnifiedTopology: true,
-      serverSelectionTimeoutMS: 10000, // Increased timeout
+      serverSelectionTimeoutMS: 10000,
       socketTimeoutMS: 45000,
       maxPoolSize: 10,
       retryWrites: true,
       retryReads: true
     };
+
+    console.log('Connection options:', JSON.stringify(options, null, 2));
+    console.log('Initiating MongoDB connection...');
 
     // Connect to MongoDB
     await mongoose.connect(uri, options);
@@ -88,17 +95,30 @@ const connectDB = async () => {
     // Get the default connection
     const db = mongoose.connection;
 
-    // Handle connection events
+    // Enhanced connection event handlers
     db.on('connected', () => {
-      console.log('MongoDB connected successfully');
+      console.log('=== MongoDB Connection Success ===');
+      console.log('- Connection established');
+      console.log('- Database name:', db.name);
+      console.log('- Host:', db.host);
+      console.log('- Port:', db.port);
     });
 
     db.on('error', (err) => {
-      console.error('MongoDB connection error:', err);
+      console.error('=== MongoDB Connection Error ===');
+      console.error('Error details:', {
+        name: err.name,
+        message: err.message,
+        code: err.code,
+        codeName: err.codeName,
+        stack: err.stack
+      });
     });
 
     db.on('disconnected', () => {
-      console.log('MongoDB disconnected');
+      console.log('=== MongoDB Disconnected ===');
+      console.log('- Time:', new Date().toISOString());
+      console.log('- Will attempt to reconnect automatically');
     });
 
     // Handle process termination
@@ -116,12 +136,17 @@ const connectDB = async () => {
     console.log('MongoDB Connected Successfully');
     return true;
   } catch (error) {
-    console.error('MongoDB connection error:', {
+    console.error('=== MongoDB Connection Fatal Error ===');
+    console.error('Error details:', {
       name: error.name,
       message: error.message,
       code: error.code,
+      codeName: error.codeName,
       stack: error.stack
     });
+    console.error('Environment check:');
+    console.error('- NODE_ENV:', process.env.NODE_ENV);
+    console.error('- MONGODB_URI exists:', !!process.env.MONGODB_URI);
     return false;
   }
 };
