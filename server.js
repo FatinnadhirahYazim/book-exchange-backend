@@ -65,16 +65,52 @@ const connectDB = async () => {
   try {
     const uri = process.env.MONGODB_URI;
     if (!uri) {
-      throw new Error('MONGODB_URI is not defined');
+      throw new Error('MONGODB_URI is not defined in environment variables');
     }
 
     console.log('MongoDB URI exists:', !!uri);
     console.log('Attempting MongoDB connection...');
     
-    await mongoose.connect(uri, {
+    // Set up connection options
+    const options = {
       useNewUrlParser: true,
       useUnifiedTopology: true,
-      serverSelectionTimeoutMS: 5000
+      serverSelectionTimeoutMS: 10000, // Increased timeout
+      socketTimeoutMS: 45000,
+      maxPoolSize: 10,
+      retryWrites: true,
+      retryReads: true
+    };
+
+    // Connect to MongoDB
+    await mongoose.connect(uri, options);
+
+    // Get the default connection
+    const db = mongoose.connection;
+
+    // Handle connection events
+    db.on('connected', () => {
+      console.log('MongoDB connected successfully');
+    });
+
+    db.on('error', (err) => {
+      console.error('MongoDB connection error:', err);
+    });
+
+    db.on('disconnected', () => {
+      console.log('MongoDB disconnected');
+    });
+
+    // Handle process termination
+    process.on('SIGINT', async () => {
+      try {
+        await db.close();
+        console.log('MongoDB connection closed through app termination');
+        process.exit(0);
+      } catch (err) {
+        console.error('Error closing MongoDB connection:', err);
+        process.exit(1);
+      }
     });
 
     console.log('MongoDB Connected Successfully');
@@ -83,7 +119,8 @@ const connectDB = async () => {
     console.error('MongoDB connection error:', {
       name: error.name,
       message: error.message,
-      code: error.code
+      code: error.code,
+      stack: error.stack
     });
     return false;
   }
